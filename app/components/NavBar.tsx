@@ -216,9 +216,16 @@ export function Navbar({
         >
           <div className="flex min-h-[76px] items-center justify-between gap-4 px-4 md:px-5">
             <Link href="/" className="group inline-flex min-w-0 items-center gap-3">
-              <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] transition group-hover:bg-white/[0.08]">
-                <span className="text-sm font-semibold text-[var(--phorium-text)]">P</span>
-                <div className="absolute inset-[1px] rounded-[15px] ring-1 ring-white/5" />
+              <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-[var(--phorium-accent)]/90 transition group-hover:bg-[#e3cf9f]">
+                <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-[var(--phorium-accent)]/90 transition group-hover:bg-[#e3cf9f]">
+                <img
+                         src="/phorium.png"
+                         alt="Phorium"
+                         className="h-6 w-6"
+                                         />
+                  <div className="absolute inset-[1px] rounded-[15px] ring-1 ring-white/5" />
+                    </div>
+                    <div className="absolute inset-[1px] rounded-[15px] ring-1 ring-white/5" />
               </div>
 
               <div className="min-w-0 leading-tight">
