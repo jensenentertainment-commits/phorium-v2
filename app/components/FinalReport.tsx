@@ -141,18 +141,24 @@ function stepTag(stepName: string) {
   if (stepName.startsWith("Pres")) return "Presisjon";
   if (stepName.startsWith("Kons")) return "Konsistens";
   if (stepName.startsWith("Fakt")) return "Faktagr.";
-  if (stepName.startsWith("Publ")) return "Publ.";
+  if (stepName.startsWith("Form")) return "Formell";
   if (stepName.startsWith("Tekn")) return "Teknisk";
   return stepName;
 }
 
 function titleForStep(step: string) {
   if (step === "Teknisk") return "Teknisk";
-  if (step === "Publ.") return "Publ.";
+  if (step === "Formell") return "Formell egnethet";
   if (step === "Faktagr.") return "Faktagr.";
   if (step === "Konsistens") return "Konsistens";
   if (step === "Presisjon") return "Presisjon";
   return step;
+}
+
+function emptyStateText(stepName: string, hasRun: boolean) {
+  if (!hasRun) return "Steget er ikke kjørt ennå.";
+  if (stepName === "Formell egnethet") return "Ingen avvik i tone eller register.";
+  return "Ingen avvik registrert.";
 }
 
 type TabKey = "all" | "critical" | "major" | "technical" | "minor";
@@ -277,7 +283,7 @@ export function FinalReport() {
       { name: "Presisjonskontroll", v: presisjon },
       { name: "Konsistenskontroll", v: konsistens },
       { name: "Faktagrunnlag", v: faktagrunnlag },
-      { name: "Publiseringsklar", v: publiseringsklar },
+      { name: "Formell egnethet", v: publiseringsklar },
     ];
     return teknisk ? [...base, { name: "Teknisk kontroll", v: teknisk }] : base;
   }, [presisjon, konsistens, faktagrunnlag, publiseringsklar, teknisk]);
@@ -299,7 +305,7 @@ export function FinalReport() {
       { step: "Presisjonskontroll", v: presisjon },
       { step: "Konsistenskontroll", v: konsistens },
       { step: "Faktagrunnlag", v: faktagrunnlag },
-      { step: "Publiseringsklar", v: publiseringsklar },
+      { step: "Formell egnethet", v: publiseringsklar },
       { step: "Teknisk kontroll", v: teknisk },
     ];
 
@@ -422,24 +428,22 @@ export function FinalReport() {
     [aggregated]
   );
 
-const computedVerdict = useMemo(() => {
-  if (!anyRun) return null;
+  const computedVerdict = useMemo(() => {
+    if (!anyRun) return null;
 
-  if (criticalItems.length > 0) return false;
+    if (criticalItems.length > 0) return false;
+    if (majorItems.length >= 3) return false;
+    if (publiseringsklar?.pass === false) return false;
 
-  if (majorItems.length >= 3) return false;
+    return true;
+  }, [anyRun, criticalItems.length, majorItems.length, publiseringsklar]);
 
-  if (publiseringsklar?.pass === false) return false;
-
-  return true;
-}, [anyRun, criticalItems.length, majorItems.length, publiseringsklar]);
-
-const riskLevel = useMemo(() => {
-  if (criticalItems.length > 0) return "Høy";
-  if (majorItems.length >= 3) return "Høy";
-  if (majorItems.length >= 1) return "Moderat";
-  return "Lav";
-}, [criticalItems.length, majorItems.length]);
+  const riskLevel = useMemo(() => {
+    if (criticalItems.length > 0) return "Høy";
+    if (majorItems.length >= 3) return "Høy";
+    if (majorItems.length >= 1) return "Moderat";
+    return "Lav";
+  }, [criticalItems.length, majorItems.length]);
 
   const verdictNote = useMemo(() => {
     if (!anyRun) return "Ingen steg er kjørt. Kjør kontrollflyten for å generere rapport.";
@@ -454,9 +458,7 @@ const riskLevel = useMemo(() => {
       ? "Kriterier: Ingen kritiske avvik og færre enn 3 alvorlige."
       : "Kriterier: Kritiske avvik eller minst 3 alvorlige utløser ikke publiseringsklar.";
   }, [anyRun, computedVerdict]);
-<div className="text-sm text-[var(--phorium-muted)]">
-  Risiko: {riskLevel}
-</div>
+
   const countsLine = useMemo(() => {
     const techMinorCount = technicalMinorItems.length;
     const notesMinorCount = nonTechnicalMinorItems.length;
@@ -845,7 +847,6 @@ const riskLevel = useMemo(() => {
 
   return (
     <section className="space-y-4">
-      {/* Sticky mini header */}
       <div className="sticky top-3 z-20">
         <div className="rounded-2xl border border-white/10 bg-black/35 px-3 py-3 backdrop-blur sm:px-4 shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -869,6 +870,12 @@ const riskLevel = useMemo(() => {
                 </span>
 
                 {anyRun && (
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-[var(--phorium-muted)]">
+                    Risiko: {riskLevel}
+                  </span>
+                )}
+
+                {anyRun && (
                   <span className="hidden sm:inline text-xs text-[var(--phorium-muted)]">
                     {countsLine}
                   </span>
@@ -889,7 +896,6 @@ const riskLevel = useMemo(() => {
         </div>
       </div>
 
-      {/* Verdict card */}
       <div className="rounded-3xl border border-white/10 bg-black/20 p-4 sm:p-6 shadow-[0_18px_60px_rgba(0,0,0,0.45)]">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
@@ -905,14 +911,10 @@ const riskLevel = useMemo(() => {
               Phorium Standard v1 • {aggregated.length} registrerte avvik
             </div>
 
-            <div className="mt-2 text-sm text-[var(--phorium-muted)]">
-              {verdictNote}
-            </div>
+            <div className="mt-2 text-sm text-[var(--phorium-muted)]">{verdictNote}</div>
 
             {verdictRule && (
-              <div className="mt-2 text-xs text-[var(--phorium-muted)]">
-                {verdictRule}
-              </div>
+              <div className="mt-2 text-xs text-[var(--phorium-muted)]">{verdictRule}</div>
             )}
 
             {computedVerdict === false && (
@@ -952,7 +954,6 @@ const riskLevel = useMemo(() => {
         </div>
       </div>
 
-      {/* Excerpt */}
       {excerpt && (
         <Section
           title="Tekst (utdrag)"
@@ -966,7 +967,6 @@ const riskLevel = useMemo(() => {
         </Section>
       )}
 
-      {/* Steps */}
       <Section
         title="Kontrollsteg"
         subtitle="Oppsummering per kontrollsteg."
@@ -984,9 +984,7 @@ const riskLevel = useMemo(() => {
               ].join(" ")}
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="text-sm font-semibold text-[var(--phorium-text)]">
-                  {x.name}
-                </div>
+                <div className="text-sm font-semibold text-[var(--phorium-text)]">{x.name}</div>
 
                 <span
                   className={[
@@ -1023,7 +1021,7 @@ const riskLevel = useMemo(() => {
                 </ul>
               ) : (
                 <div className="mt-3 text-sm text-[var(--phorium-muted)]">
-                  {x.v ? "Ingen avvik registrert." : "Steget er ikke kjørt ennå."}
+                  {emptyStateText(x.name, !!x.v)}
                 </div>
               )}
             </div>
@@ -1031,7 +1029,6 @@ const riskLevel = useMemo(() => {
         </div>
       </Section>
 
-      {/* Aggregated */}
       <Section
         title="Registrerte avvik"
         subtitle="Avvik er deduplisert og strukturert. Bruk filtrering og søk for å navigere raskt."
@@ -1103,9 +1100,7 @@ const riskLevel = useMemo(() => {
                     •
                   </span>
                   <div className="min-w-0">
-                    <div className="text-[var(--phorium-text)] leading-relaxed">
-                      {a.message}
-                    </div>
+                    <div className="text-[var(--phorium-text)] leading-relaxed">{a.message}</div>
 
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-[var(--phorium-muted)]">
@@ -1126,9 +1121,7 @@ const riskLevel = useMemo(() => {
                     </div>
 
                     {a.evidence && (
-                      <div className="mt-2 text-xs text-[var(--phorium-muted)]">
-                        «{a.evidence}»
-                      </div>
+                      <div className="mt-2 text-xs text-[var(--phorium-muted)]">«{a.evidence}»</div>
                     )}
                   </div>
                 </li>

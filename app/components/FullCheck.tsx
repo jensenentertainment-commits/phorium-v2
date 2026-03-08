@@ -24,7 +24,7 @@ const FLOW = [
   { label: "Presisjon", tool: "presisjonskontroll", storeKey: "phorium:presisjon" },
   { label: "Konsistens", tool: "konsistenskontroll", storeKey: "phorium:konsistens" },
   { label: "Faktagrunnlag", tool: "faktagrunnlag", storeKey: "phorium:faktagrunnlag" },
-  { label: "Publiseringsklar", tool: "publiseringsklar", storeKey: "phorium:publiseringsklar" },
+  { label: "Formell Egnethet", tool: "publiseringsklar", storeKey: "phorium:publiseringsklar" },
 ] as const;
 
 function sleep(ms: number) {

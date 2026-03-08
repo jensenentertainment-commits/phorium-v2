@@ -18,7 +18,7 @@ const CONTROL_MODULES = [
   },
   {
     code: "04",
-    title: "Publiseringsklar",
+    title: "Formell Egnethet",
     text: "Avslutter kontrollen med en samlet vurdering av om teksten bør publiseres som den er.",
   },
 ];
