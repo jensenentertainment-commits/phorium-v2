@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
-import { registerRun, getOrCreateAccess } from "@/lib/phorium-access";
+import { startRun } from "@/lib/phorium-access";
 
 export async function POST(req: Request) {
   try {
-    const { email } = await req.json();
+    const body = await req.json();
+
+    const email = body?.email;
+    const includesTechnical = Boolean(body?.includesTechnical);
 
     if (!email || typeof email !== "string") {
       return NextResponse.json(
@@ -12,42 +15,47 @@ export async function POST(req: Request) {
       );
     }
 
-    const access = await getOrCreateAccess(email);
+    const result = await startRun(email, includesTechnical);
 
-    if (!access.canRun) {
+    if (!result.runAllowed) {
+      if (result.runReason === "FREE_LIMIT_REACHED") {
+        return NextResponse.json(
+          {
+            error: "FREE_LIMIT_REACHED",
+            message: "Du har brukt opp dine 3 gratis analyser.",
+            access: result,
+          },
+          { status: 402 }
+        );
+      }
+
+      if (result.runReason === "TECHNICAL_REQUIRES_SUBSCRIPTION") {
+        return NextResponse.json(
+          {
+            error: "TECHNICAL_REQUIRES_SUBSCRIPTION",
+            message: "Teknisk kontroll krever abonnement eller VIP-tilgang.",
+            access: result,
+          },
+          { status: 403 }
+        );
+      }
+
       return NextResponse.json(
         {
-          error: "FREE_LIMIT_REACHED",
-          message: "Du har brukt opp dine 3 gratis analyser.",
-          access,
+          error: "RUN_NOT_ALLOWED",
+          message: "Analyse kan ikke startes.",
+          access: result,
         },
-        { status: 402 }
+        { status: 403 }
       );
     }
-
-    await registerRun(email, false);
-
-    const updated = await getOrCreateAccess(email);
 
     return NextResponse.json({
       ok: true,
-      access: updated,
+      access: result,
     });
   } catch (error) {
     console.error("Start run failed:", error);
-
-    const message =
-      error instanceof Error ? error.message : "Ukjent feil";
-
-    if (message === "FREE_LIMIT_REACHED") {
-      return NextResponse.json(
-        {
-          error: "FREE_LIMIT_REACHED",
-          message: "Du har brukt opp dine 3 gratis analyser.",
-        },
-        { status: 402 }
-      );
-    }
 
     return NextResponse.json(
       { error: "Kunne ikke starte analyse." },
