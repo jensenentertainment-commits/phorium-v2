@@ -3,7 +3,8 @@ import { getOrCreateAccess } from "@/lib/phorium-access";
 
 export async function POST(req: Request) {
   try {
-    const { email } = await req.json();
+    const body = await req.json();
+    const email = body?.email;
 
     if (!email || typeof email !== "string") {
       return NextResponse.json(
@@ -14,9 +15,13 @@ export async function POST(req: Request) {
 
     const access = await getOrCreateAccess(email);
 
-    return NextResponse.json(access);
+    return NextResponse.json({
+      ok: true,
+      access,
+    });
   } catch (error) {
     console.error("Access check failed:", error);
+
     return NextResponse.json(
       { error: "Kunne ikke sjekke tilgang." },
       { status: 500 }

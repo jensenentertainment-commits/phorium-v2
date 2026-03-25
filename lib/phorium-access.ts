@@ -1,25 +1,47 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
+export type SubscriptionStatus = "inactive" | "active" | "past_due" | "canceled";
+export type AccessTier = "default" | "vip";
+
 export type AccessState = {
   email: string;
   displayName: string | null;
   freeRunsUsed: number;
-  subscriptionStatus: "inactive" | "active" | "past_due" | "canceled";
-  accessTier: "default" | "vip";
+  subscriptionStatus: SubscriptionStatus;
+  accessTier: AccessTier;
   canRun: boolean;
   canUseTechnical: boolean;
 };
 
-function isVipTier(accessTier: string | null | undefined) {
-  return (accessTier ?? "default") === "vip";
+export type StartRunResult = AccessState & {
+  runAllowed: boolean;
+  runReason: "OK" | "FREE_LIMIT_REACHED" | "TECHNICAL_REQUIRES_SUBSCRIPTION";
+  technicalEnabled: boolean;
+};
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function parseSubscriptionStatus(value: unknown): SubscriptionStatus {
+  return value === "active" ||
+    value === "past_due" ||
+    value === "canceled" ||
+    value === "inactive"
+    ? value
+    : "inactive";
+}
+
+function parseAccessTier(value: unknown): AccessTier {
+  return value === "vip" || value === "default" ? value : "default";
 }
 
 export async function getOrCreateAccess(email: string): Promise<AccessState> {
-  const normalized = email.trim().toLowerCase();
+  const normalized = normalizeEmail(email);
 
   let { data, error } = await supabaseAdmin
     .from("phorium_access")
-    .select("*")
+    .select("email, display_name, free_runs_used, subscription_status, access_tier")
     .eq("email", normalized)
     .maybeSingle();
 
@@ -35,60 +57,58 @@ export async function getOrCreateAccess(email: string): Promise<AccessState> {
         subscription_status: "inactive",
         access_tier: "default",
       })
-      .select("*")
+      .select("email, display_name, free_runs_used, subscription_status, access_tier")
       .single();
 
     if (inserted.error) throw inserted.error;
     data = inserted.data;
   }
 
-  const subscriptionStatus = (data.subscription_status ??
-    "inactive") as AccessState["subscriptionStatus"];
-
-  const accessTier = (data.access_tier ?? "default") as AccessState["accessTier"];
-
-  const isActive = subscriptionStatus === "active";
-  const isVip = isVipTier(accessTier);
+  const freeRunsUsed = data.free_runs_used ?? 0;
+  const subscriptionStatus = parseSubscriptionStatus(data.subscription_status);
+  const accessTier = parseAccessTier(data.access_tier);
+  const hasFullAccess = subscriptionStatus === "active" || accessTier === "vip";
 
   return {
     email: data.email,
     displayName: data.display_name ?? null,
-    freeRunsUsed: data.free_runs_used ?? 0,
+    freeRunsUsed,
     subscriptionStatus,
     accessTier,
-    canRun: isVip || isActive || (data.free_runs_used ?? 0) < 3,
-    canUseTechnical: isVip || isActive,
+    canRun: hasFullAccess || freeRunsUsed < 3,
+    canUseTechnical: hasFullAccess,
   };
 }
 
-export async function registerRun(email: string, includesTechnical: boolean) {
-  const normalized = email.trim().toLowerCase();
-  const access = await getOrCreateAccess(normalized);
+export async function startRun(
+  email: string,
+  includesTechnical: boolean
+): Promise<StartRunResult> {
+  const normalized = normalizeEmail(email);
 
-  if (!access.canRun) {
-    throw new Error("FREE_LIMIT_REACHED");
-  }
-
-  const hasFullAccess =
-    access.subscriptionStatus === "active" || access.accessTier === "vip";
-
-  if (includesTechnical && !hasFullAccess) {
-    throw new Error("TECHNICAL_REQUIRES_SUBSCRIPTION");
-  }
-
-  if (!hasFullAccess) {
-    const update = await supabaseAdmin
-      .from("phorium_access")
-      .update({ free_runs_used: access.freeRunsUsed + 1 })
-      .eq("email", normalized);
-
-    if (update.error) throw update.error;
-  }
-
-  const runInsert = await supabaseAdmin.from("phorium_runs").insert({
-    email: normalized,
-    includes_technical: includesTechnical && hasFullAccess,
+  const { data, error } = await supabaseAdmin.rpc("start_phorium_run", {
+    p_email: normalized,
+    p_includes_technical: includesTechnical,
   });
 
-  if (runInsert.error) throw runInsert.error;
+  if (error) throw error;
+
+  const row = Array.isArray(data) ? data[0] : data;
+
+  if (!row) {
+    throw new Error("START_RUN_EMPTY_RESPONSE");
+  }
+
+  return {
+    email: row.email,
+    displayName: row.display_name ?? null,
+    freeRunsUsed: row.free_runs_used ?? 0,
+    subscriptionStatus: parseSubscriptionStatus(row.subscription_status),
+    accessTier: parseAccessTier(row.access_tier),
+    canRun: Boolean(row.can_run),
+    canUseTechnical: Boolean(row.can_use_technical),
+    runAllowed: Boolean(row.run_allowed),
+    runReason: row.run_reason,
+    technicalEnabled: Boolean(row.technical_enabled),
+  };
 }

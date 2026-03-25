@@ -11,14 +11,34 @@ type Status = "none" | "running" | "ok" | "bad";
 
 type AccessState = {
   email: string;
+  displayName: string | null;
   freeRunsUsed: number;
   subscriptionStatus: "inactive" | "active" | "past_due" | "canceled";
+  accessTier: "default" | "vip";
   canRun: boolean;
   canUseTechnical: boolean;
 };
 
+type StartRunAccess = AccessState & {
+  runAllowed: boolean;
+  runReason: "OK" | "FREE_LIMIT_REACHED" | "TECHNICAL_REQUIRES_SUBSCRIPTION";
+  technicalEnabled: boolean;
+};
+
+type StartRunResponse = {
+  ok: true;
+  access: StartRunAccess;
+};
+
+type ApiError = Error & {
+  code?: string;
+  access?: AccessState | StartRunAccess | null;
+};
+
 const MIN_CHARS = 140;
 const EMAIL_STORAGE_KEY = "phorium:email";
+const RUNSTATE_STORAGE_KEY = "phorium:runstate";
+const TECHNICAL_STORE_KEY = "phorium:tekniskkontroll";
 
 const FLOW = [
   { label: "Presisjon", tool: "presisjonskontroll", storeKey: "phorium:presisjon" },
@@ -370,6 +390,13 @@ function Paywall({
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
 
+  React.useEffect(() => {
+    if (!open) {
+      setLoading(false);
+      setError("");
+    }
+  }, [open]);
+
   if (!open) return null;
 
   async function startCheckout() {
@@ -474,36 +501,69 @@ export function FullCheck() {
 
   const runningRef = React.useRef(false);
 
-  React.useEffect(() => {
-    setTextState(getDraft());
-
-    if (typeof window !== "undefined") {
-      const savedEmail = window.localStorage.getItem(EMAIL_STORAGE_KEY) ?? "";
-      if (savedEmail) {
-        const normalized = normalizeEmail(savedEmail);
-        setEmail(normalized);
-        setEmailInput(normalized);
-      }
-    }
-  }, []);
-
   const canSubmit = React.useMemo(() => text.trim().length >= MIN_CHARS, [text]);
+  const effectiveCanUseTechnical = access?.canUseTechnical ?? false;
 
   const stepText = React.useMemo(() => {
     if (activeIndex < 0 || activeIndex >= FLOW.length) return "Systemet er klart.";
     return `Systemet behandler innsendingen. Steg ${activeIndex + 1}/${FLOW.length}: ${FLOW[activeIndex].label}.`;
   }, [activeIndex]);
 
-  const effectiveCanUseTechnical = access?.canUseTechnical ?? false;
+  React.useEffect(() => {
+    setTextState(getDraft());
 
-  function pushLog(line: string) {
-    const t = Date.now();
-    setLog((prev) => [...prev, { t, text: line }]);
+    if (typeof window === "undefined") return;
+
+    const savedEmail = window.localStorage.getItem(EMAIL_STORAGE_KEY) ?? "";
+    if (!savedEmail) return;
+
+    const normalized = normalizeEmail(savedEmail);
+    setEmail(normalized);
+    setEmailInput(normalized);
+
+    void refreshAccess(normalized);
+  }, []);
+
+  async function refreshAccess(targetEmail: string) {
+    const res = await fetch("/api/phorium/access", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: targetEmail }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data?.error || "Kunne ikke sjekke tilgang.");
+    }
+
+    const nextAccess = data.access as AccessState;
+    setAccess(nextAccess);
+    return nextAccess;
   }
 
-  function onChange(next: string) {
-    setTextState(next);
-    setDraft(next);
+  async function reserveRun(targetEmail: string) {
+    const res = await fetch("/api/phorium/start-run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: targetEmail,
+        includesTechnical: includeTechnical,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      const err = new Error(
+        data?.message || data?.error || "Kunne ikke starte analyse."
+      ) as ApiError;
+      err.code = data?.error;
+      err.access = data?.access ?? null;
+      throw err;
+    }
+
+    return data as StartRunResponse;
   }
 
   async function runTool(tool: string, submittedText: string) {
@@ -521,40 +581,41 @@ export function FullCheck() {
     return (await res.json()) as StandardResponse;
   }
 
-  async function fetchAccessState(targetEmail: string) {
-    const res = await fetch("/api/phorium/access", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: targetEmail }),
-    });
+  function setRunState(isActive: boolean) {
+    runningRef.current = isActive;
+    setIsRunning(isActive);
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data?.error || "Kunne ikke sjekke tilgang.");
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(
+        RUNSTATE_STORAGE_KEY,
+        JSON.stringify({ running: isActive, t: Date.now() })
+      );
+      window.dispatchEvent(new Event("phorium:runstate"));
     }
-
-    return data as AccessState;
   }
 
-  async function reserveRun(targetEmail: string) {
-    const res = await fetch("/api/phorium/start-run", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: targetEmail }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      const msg = data?.message || data?.error || "Kunne ikke starte analyse.";
-      const err = new Error(msg) as Error & { code?: string; access?: AccessState };
-      err.code = data?.error;
-      err.access = data?.access;
-      throw err;
+  function dispatchStepsUpdated() {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("phorium:steps-updated"));
     }
+  }
 
-    return data;
+  function clearStoredResults() {
+    if (typeof window === "undefined") return;
+
+    FLOW.forEach((step) => window.localStorage.removeItem(step.storeKey));
+    window.localStorage.removeItem(TECHNICAL_STORE_KEY);
+    dispatchStepsUpdated();
+  }
+
+  function pushLog(line: string) {
+    const t = Date.now();
+    setLog((prev) => [...prev, { t, text: line }]);
+  }
+
+  function onChange(next: string) {
+    setTextState(next);
+    setDraft(next);
   }
 
   async function beginRun(targetEmail: string) {
@@ -563,38 +624,15 @@ export function FullCheck() {
     setMessage("");
     setShowPaywall(false);
 
-    const currentAccess = await fetchAccessState(targetEmail);
-    setAccess(currentAccess);
+    const startData = await reserveRun(targetEmail);
+    const reservedAccess = startData.access;
+    setAccess(reservedAccess);
 
-    if (!currentAccess.canRun) {
-      setShowPaywall(true);
-      return;
-    }
-
-    await reserveRun(targetEmail);
-
-    const refreshedAccess = await fetchAccessState(targetEmail);
-    setAccess(refreshedAccess);
-
-    runningRef.current = true;
-    setIsRunning(true);
-
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(
-        "phorium:runstate",
-        JSON.stringify({ running: true, t: Date.now() })
-      );
-      window.dispatchEvent(new Event("phorium:runstate"));
-    }
-
+    setRunState(true);
     setLog([]);
     setActiveIndex(0);
     setStatuses(["running", "none", "none", "none"]);
-
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem("phorium:tekniskkontroll");
-      window.dispatchEvent(new Event("phorium:steps-updated"));
-    }
+    clearStoredResults();
 
     const submittedText = text;
 
@@ -609,14 +647,14 @@ export function FullCheck() {
         const step = FLOW[idx];
 
         setActiveIndex(idx);
-        setStatuses((prev) => prev.map((s, i) => (i === idx ? "running" : s)));
+        setStatuses((prev) => prev.map((status, i) => (i === idx ? "running" : status)));
 
         pushLog(`Sjekker ${step.label.toLowerCase()}…`);
 
         const data = await runTool(step.tool, submittedText);
 
         setStatuses((prev) =>
-          prev.map((s, i) => (i === idx ? (data.pass ? "ok" : "bad") : s))
+          prev.map((status, i) => (i === idx ? (data.pass ? "ok" : "bad") : status))
         );
 
         saveStepResult(step.storeKey, {
@@ -626,30 +664,26 @@ export function FullCheck() {
           submittedText,
         });
 
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("phorium:steps-updated"));
-        }
+        dispatchStepsUpdated();
 
         pushLog(data.pass ? `${step.label}: OK.` : `${step.label}: Avvik registrert.`);
         await sleep(160);
       }
 
-      if (refreshedAccess.canUseTechnical && includeTechnical) {
+      if (reservedAccess.technicalEnabled) {
         pushLog("Kjører teknisk kontroll…");
         await sleep(140);
 
         const tech = await runTool("tekniskkontroll", submittedText);
 
-        saveStepResult("phorium:tekniskkontroll", {
+        saveStepResult(TECHNICAL_STORE_KEY, {
           pass: tech.pass,
           issues: tech.issues ?? [],
           bullets: tech.bullets ?? [],
           submittedText,
         });
 
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("phorium:steps-updated"));
-        }
+        dispatchStepsUpdated();
 
         pushLog(tech.pass ? "Teknisk kontroll: OK." : "Teknisk kontroll: Merknader registrert.");
         await sleep(140);
@@ -667,32 +701,12 @@ export function FullCheck() {
       await sleep(220);
 
       setActiveIndex(-1);
-      setIsRunning(false);
-      runningRef.current = false;
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(
-          "phorium:runstate",
-          JSON.stringify({ running: false, t: Date.now() })
-        );
-        window.dispatchEvent(new Event("phorium:runstate"));
-      }
-
+      setRunState(false);
       router.push("/rapport");
     } catch (e: any) {
       setActiveIndex(-1);
       setStatuses(["none", "none", "none", "none"]);
-      setIsRunning(false);
-      runningRef.current = false;
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(
-          "phorium:runstate",
-          JSON.stringify({ running: false, t: Date.now() })
-        );
-        window.dispatchEvent(new Event("phorium:runstate"));
-      }
-
+      setRunState(false);
       setMessage(e?.message || "Uventet feil. Prøv igjen.");
       pushLog("Prosess avbrutt: feil oppstod.");
     }
@@ -712,8 +726,14 @@ export function FullCheck() {
       await beginRun(email);
     } catch (e: any) {
       if (e?.code === "FREE_LIMIT_REACHED") {
-        setAccess(e?.access ?? null);
+        setAccess((e?.access as AccessState | null) ?? access);
         setShowPaywall(true);
+        return;
+      }
+
+      if (e?.code === "TECHNICAL_REQUIRES_SUBSCRIPTION") {
+        setAccess((e?.access as AccessState | null) ?? access);
+        setMessage("Teknisk kontroll krever abonnement eller VIP-tilgang.");
         return;
       }
 
@@ -738,16 +758,23 @@ export function FullCheck() {
       }
 
       setEmail(normalized);
-      const initialAccess = await fetchAccessState(normalized);
-      setAccess(initialAccess);
+      setEmailInput(normalized);
+      await refreshAccess(normalized);
       setShowEmailGate(false);
 
       await beginRun(normalized);
     } catch (e: any) {
       if (e?.code === "FREE_LIMIT_REACHED") {
-        setAccess(e?.access ?? null);
+        setAccess((e?.access as AccessState | null) ?? access);
         setShowEmailGate(false);
         setShowPaywall(true);
+        return;
+      }
+
+      if (e?.code === "TECHNICAL_REQUIRES_SUBSCRIPTION") {
+        setAccess((e?.access as AccessState | null) ?? access);
+        setShowEmailGate(false);
+        setMessage("Teknisk kontroll krever abonnement eller VIP-tilgang.");
         return;
       }
 
@@ -766,20 +793,8 @@ export function FullCheck() {
     setLog([]);
     setActiveIndex(-1);
     setStatuses(["none", "none", "none", "none"]);
-    setIsRunning(false);
-    runningRef.current = false;
-
-    if (typeof window !== "undefined") {
-      FLOW.forEach((s) => window.localStorage.removeItem(s.storeKey));
-      window.localStorage.removeItem("phorium:tekniskkontroll");
-      window.localStorage.setItem(
-        "phorium:runstate",
-        JSON.stringify({ running: false, t: Date.now() })
-      );
-
-      window.dispatchEvent(new Event("phorium:steps-updated"));
-      window.dispatchEvent(new Event("phorium:runstate"));
-    }
+    setRunState(false);
+    clearStoredResults();
   }
 
   const primaryLabel = isRunning ? "Kontrollerer…" : "Kjør full kontroll";
@@ -838,8 +853,7 @@ export function FullCheck() {
         <Panel
           eyebrow="Innsending"
           title="Tekstgrunnlag"
-          subtitle="Lim inn teksten som skal vurderes.
-Phorium analyserer den gjennom hele kontrollflyten."
+          subtitle="Lim inn teksten som skal vurderes. Phorium analyserer den gjennom hele kontrollflyten."
         >
           <Editor
             value={text}
