@@ -33,9 +33,8 @@ export function Footer() {
                 </p>
 
                 <p className="mt-4 max-w-lg text-sm leading-relaxed text-[var(--phorium-muted)]">
-                  Phorium vurderer tekst i en fast kontrollramme og samler
-                  resultatet i én kontrollrapport. Utformet for tydeligere
-                  innhold, færre svakheter og mer presis publisering.
+                  Phorium analyserer tekst og gir én samlet vurdering før publisering.
+Utformet for tydeligere innhold, færre svakheter og mer presise formuleringer.
                 </p>
               </div>
 

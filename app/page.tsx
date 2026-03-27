@@ -4,22 +4,22 @@ const CONTROL_MODULES = [
   {
     code: "01",
     title: "Presisjon",
-    text: "Vurderer om påstander er konkrete, avgrensede og språklig presise nok til å tåle publisering.",
+    text: "Vurderer om teksten er konkret, tydelig og presis nok til å publiseres.",
   },
   {
     code: "02",
     title: "Konsistens",
-    text: "Vurderer om begreper, tall, formuleringer og interne opplysninger henger sammen i hele teksten.",
+    text: "Vurderer om tall, begreper og formuleringer henger sammen i hele teksten.",
   },
   {
     code: "03",
     title: "Faktagrunnlag",
-    text: "Vurderer om innholdet kan dokumenteres, etterprøves og støttes av et tydelig grunnlag.",
+    text: "Vurderer om påstander har et tydelig og etterprøvbart grunnlag.",
   },
   {
     code: "04",
-    title: "Formell Egnethet",
-    text: "Avslutter kontrollen med en samlet vurdering av om teksten bør publiseres som den er.",
+    title: "Formell egnethet",
+    text: "Avslutter med en samlet vurdering av om teksten er egnet for publisering som den står.",
   },
 ];
 
@@ -36,6 +36,13 @@ const REPORT_ITEMS = [
     label: "Merknad",
     text: "Formuleringen «profesjonelt!!» svekker tonen og fremstår unødvendig forsterket.",
   },
+];
+
+const TYPICAL_FINDINGS = [
+  "Uklare eller for brede formuleringer",
+  "Tall eller opplysninger som ikke stemmer overens",
+  "Påstander uten tydelig grunnlag",
+  "Formuleringer som svekker profesjonell tone",
 ];
 
 export default function HomePage() {
@@ -60,17 +67,16 @@ export default function HomePage() {
               </div>
 
               <h1 className="mt-4 max-w-3xl text-3xl font-semibold tracking-tight text-[var(--phorium-text)] md:text-5xl">
-                Kontrollsystem for tekst før publisering
+                Presis kontroll før publisering
               </h1>
 
               <p className="mt-4 max-w-2xl text-base leading-relaxed text-[var(--phorium-text)]/90 md:text-[1.1rem]">
-                Phorium analyserer tekst i en fast kontrollramme og leverer én samlet kontrollrapport.
+                Phorium analyserer teksten din og avdekker uklare formuleringer,
+                interne motsigelser og påstander med svakt grunnlag før publisering.
               </p>
 
               <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--phorium-muted)] md:text-base">
-                Ingen omskriving. Ingen tekstgenerering. Bare strukturert
-                vurdering av presisjon, konsistens, faktagrunnlag og
-                publiseringsklarhet.
+                Ingen omskriving. Ingen tekstgenerering. Kun en strukturert vurdering av om teksten er klar for publisering.
               </p>
 
               <div className="mt-6 flex flex-wrap gap-2">
@@ -78,7 +84,7 @@ export default function HomePage() {
                   4 vurderingsledd
                 </span>
                 <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-[var(--phorium-muted)]">
-                  Én kontrollrapport
+                  Én samlet rapport
                 </span>
                 <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-[var(--phorium-muted)]">
                   Midlertidig tekstbehandling
@@ -90,7 +96,7 @@ export default function HomePage() {
                   href="/kontroll"
                   className="inline-flex w-full items-center justify-center rounded-full bg-[var(--phorium-accent)] px-5 py-2.5 text-sm font-semibold text-[#11140f] shadow-[0_16px_50px_rgba(0,0,0,0.45)] transition hover:brightness-105 active:brightness-95 sm:w-auto"
                 >
-                  Start kontroll
+                  Sjekk tekst
                 </Link>
 
                 <Link
@@ -102,6 +108,23 @@ export default function HomePage() {
 
                 <div className="text-xs text-[var(--phorium-muted)]">
                   3 gratis analyser før abonnement
+                </div>
+              </div>
+
+              <div className="mt-8 rounded-[1.4rem] border border-white/10 bg-white/[0.03] p-4 md:p-5">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--phorium-muted)]">
+                  Typiske funn
+                </div>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {TYPICAL_FINDINGS.map((item) => (
+                    <div
+                      key={item}
+                      className="rounded-xl border border-white/8 bg-black/10 px-3 py-3 text-sm text-[var(--phorium-text)]/90"
+                    >
+                      {item}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -156,7 +179,7 @@ export default function HomePage() {
                     Innsending
                   </div>
                   <div className="mt-2 text-sm text-[var(--phorium-text)]">
-                    Lim inn tekst én gang
+                    Lim inn teksten én gang
                   </div>
                 </div>
 
@@ -165,7 +188,7 @@ export default function HomePage() {
                     Resultat
                   </div>
                   <div className="mt-2 text-sm text-[var(--phorium-text)]">
-                    Én samlet kontrollrapport
+                    Få én samlet vurdering
                   </div>
                 </div>
               </div>
@@ -187,12 +210,12 @@ export default function HomePage() {
                 Faktagrunnlag
               </span>
               <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
-                Publiseringsklar
+                Formell egnethet
               </span>
             </div>
 
             <div className="text-[11px] text-[var(--phorium-muted)]">
-              Fast kontrollramme for tekst før publisering
+              Kontroll av tekst før publisering
             </div>
           </div>
         </div>
@@ -206,12 +229,12 @@ export default function HomePage() {
           </div>
 
           <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[var(--phorium-text)]">
-            Ett resultatformat
+            Én kontrollrapport
           </h2>
 
           <p className="mt-3 max-w-md text-sm leading-relaxed text-[var(--phorium-muted)]">
             Etter fullført kontroll samles avvik, merknader og endelig vurdering
-            i én rapport. Rapporten er bygget for gjennomgang, dokumentasjon og
+            i én rapport. Rapporten er laget for gjennomgang, dokumentasjon og
             beslutning før publisering.
           </p>
 
