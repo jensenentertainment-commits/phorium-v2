@@ -44,7 +44,7 @@ const FLOW = [
   { label: "Presisjon", tool: "presisjonskontroll", storeKey: "phorium:presisjon" },
   { label: "Konsistens", tool: "konsistenskontroll", storeKey: "phorium:konsistens" },
   { label: "Faktagrunnlag", tool: "faktagrunnlag", storeKey: "phorium:faktagrunnlag" },
-  { label: "Formell Egnethet", tool: "publiseringsklar", storeKey: "phorium:publiseringsklar" },
+  { label: "Formell egnethet", tool: "publiseringsklar", storeKey: "phorium:publiseringsklar" },
 ] as const;
 
 function sleep(ms: number) {
@@ -170,12 +170,12 @@ function ScanIndicator({
   return (
     <Panel
       eyebrow="Kontrollstatus"
-      title="Aktiv prosess"
-      subtitle="Phorium følger en fast vurderingsrekkefølge og lagrer resultatet etter hvert ledd."
+      title="Vurderingen pågår"
+      subtitle="Phorium går gjennom hvert kontrollledd i fast rekkefølge før endelig vurdering."
     >
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm text-[var(--phorium-muted)]">
-          {activeIndex >= 0 ? `Steg ${activeIndex + 1}/${FLOW.length}` : "Klar"}
+          {activeIndex >= 0 ? `Steg ${activeIndex + 1}/${FLOW.length}` : "Klar til start"}
         </div>
         <div className="text-xs text-[var(--phorium-muted)]">Phorium Standard</div>
       </div>
@@ -275,16 +275,16 @@ function SystemLog({
   running: boolean;
 }) {
   return (
-    <Panel eyebrow="Systemlogg" title="Prosesshendelser">
+    <Panel eyebrow="Prosesslogg" title="Hendelser under kontrollen">
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs text-[var(--phorium-muted)]">
-          {running ? "LIVE" : "Ingen aktiv prosess"}
+          {running ? "Pågår" : "Ingen aktiv kontroll"}
         </div>
       </div>
 
       <div className="mt-4 space-y-2 text-sm">
         {lines.length === 0 ? (
-          <div className="text-[var(--phorium-muted)]">Ingen aktivitet.</div>
+          <div className="text-[var(--phorium-muted)]">Ingen aktivitet ennå.</div>
         ) : (
           lines.slice(-10).map((l) => (
             <div key={l.t} className="flex gap-3">
@@ -331,11 +331,11 @@ function EmailGate({
         </div>
 
         <h3 className="mt-2 text-xl font-semibold text-[var(--phorium-text)]">
-          Oppgi e-post for å starte analyse
+          Oppgi e-post for å starte kontrollen
         </h3>
 
         <p className="mt-3 text-sm leading-relaxed text-[var(--phorium-muted)]">
-          Phorium bruker e-post for å holde styr på 3 gratis analyser og abonnement.
+          Phorium bruker e-post for å holde styr på gratis analyser og abonnement.
         </p>
 
         <div className="mt-5">
@@ -448,7 +448,7 @@ function Paywall({
           <div className="mt-3 space-y-2 text-sm text-[var(--phorium-muted)]">
             <div>249 kr / måned</div>
             <div>Ubegrensede analyser</div>
-            <div>Tekniskkontroll inkludert</div>
+            <div>Teknisk kontroll inkludert</div>
           </div>
         </div>
 
@@ -505,8 +505,10 @@ export function FullCheck() {
   const effectiveCanUseTechnical = access?.canUseTechnical ?? false;
 
   const stepText = React.useMemo(() => {
-    if (activeIndex < 0 || activeIndex >= FLOW.length) return "Systemet er klart.";
-    return `Systemet behandler innsendingen. Steg ${activeIndex + 1}/${FLOW.length}: ${FLOW[activeIndex].label}.`;
+    if (activeIndex < 0 || activeIndex >= FLOW.length) {
+      return "Klar til å vurdere teksten før publisering.";
+    }
+    return `Vurderer teksten. Steg ${activeIndex + 1}/${FLOW.length}: ${FLOW[activeIndex].label}.`;
   }, [activeIndex]);
 
   React.useEffect(() => {
@@ -637,10 +639,10 @@ export function FullCheck() {
     const submittedText = text;
 
     try {
-      pushLog("Initierer kontroll…");
+      pushLog("Starter kontroll…");
       await sleep(150);
 
-      pushLog("Validerer input…");
+      pushLog("Validerer innsending…");
       await sleep(120);
 
       for (let idx = 0; idx < FLOW.length; idx++) {
@@ -649,7 +651,7 @@ export function FullCheck() {
         setActiveIndex(idx);
         setStatuses((prev) => prev.map((status, i) => (i === idx ? "running" : status)));
 
-        pushLog(`Sjekker ${step.label.toLowerCase()}…`);
+        pushLog(`Vurderer ${step.label.toLowerCase()}…`);
 
         const data = await runTool(step.tool, submittedText);
 
@@ -666,7 +668,7 @@ export function FullCheck() {
 
         dispatchStepsUpdated();
 
-        pushLog(data.pass ? `${step.label}: OK.` : `${step.label}: Avvik registrert.`);
+        pushLog(data.pass ? `${step.label}: godkjent.` : `${step.label}: avvik registrert.`);
         await sleep(160);
       }
 
@@ -685,19 +687,19 @@ export function FullCheck() {
 
         dispatchStepsUpdated();
 
-        pushLog(tech.pass ? "Teknisk kontroll: OK." : "Teknisk kontroll: Merknader registrert.");
+        pushLog(tech.pass ? "Teknisk kontroll: godkjent." : "Teknisk kontroll: merknader registrert.");
         await sleep(140);
       }
 
       pushLog("Kompilerer rapport…");
       await sleep(200);
 
-      pushLog("Ferdigstiller vedtak…");
+      pushLog("Fastsetter endelig vurdering…");
       await sleep(160);
 
       setDraft(submittedText);
 
-      pushLog("Kontroll fullført. Videresender til rapport.");
+      pushLog("Kontroll fullført. Åpner rapport.");
       await sleep(220);
 
       setActiveIndex(-1);
@@ -708,7 +710,7 @@ export function FullCheck() {
       setStatuses(["none", "none", "none", "none"]);
       setRunState(false);
       setMessage(e?.message || "Uventet feil. Prøv igjen.");
-      pushLog("Prosess avbrutt: feil oppstod.");
+      pushLog("Kontrollen ble avbrutt fordi en feil oppstod.");
     }
   }
 
@@ -797,7 +799,7 @@ export function FullCheck() {
     clearStoredResults();
   }
 
-  const primaryLabel = isRunning ? "Kontrollerer…" : "Kjør full kontroll";
+  const primaryLabel = isRunning ? "Kontrollerer…" : "Start kontroll";
 
   return (
     <section className="space-y-5">
@@ -824,19 +826,19 @@ export function FullCheck() {
       />
 
       <Panel
-        eyebrow="Kontrollmodus"
-        title="Phorium Standard v1.0"
-        subtitle="Lim inn teksten og start full kontroll. Rapport genereres etter fullført vurdering."
+        eyebrow="Kontroll før publisering"
+        title="Få en tydelig vurdering av teksten"
+        subtitle="Lim inn teksten og få en samlet vurdering av om den bør publiseres som den står. Phorium vurderer presisjon, konsistens, faktagrunnlag og formell egnethet før endelig konklusjon."
       >
         <div className="flex flex-wrap gap-2">
           <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-[var(--phorium-muted)]">
             4 vurderingsledd
           </span>
           <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-[var(--phorium-muted)]">
-            Én kontrollrapport
+            Samlet publiseringsvurdering
           </span>
           <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-[var(--phorium-muted)]">
-            Ingen omskriving
+            Kritiske avvik prioriteres
           </span>
 
           {email ? (
@@ -847,13 +849,17 @@ export function FullCheck() {
             </span>
           ) : null}
         </div>
+
+        <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-sm leading-relaxed text-[var(--phorium-muted)]">
+          En tekst kan se ferdig ut og likevel ikke holde for publisering. Phorium vurderer ikke hvordan teksten kan omskrives, men om den faktisk bør publiseres som den står.
+        </div>
       </Panel>
 
       <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <Panel
           eyebrow="Innsending"
-          title="Tekstgrunnlag"
-          subtitle="Lim inn teksten som skal vurderes. Phorium analyserer den gjennom hele kontrollflyten."
+          title="Tekst til vurdering"
+          subtitle="Lim inn teksten du vil kontrollere. Resultatet samles i én rapport med avvik, merknader og endelig vurdering."
         >
           <Editor
             value={text}
@@ -862,6 +868,26 @@ export function FullCheck() {
             minChars={MIN_CHARS}
             onSubmit={onRunAll}
           />
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--phorium-muted)]">
+                Rapporten viser
+              </div>
+              <div className="mt-2 text-sm text-[var(--phorium-text)]">
+                Kritiske avvik, alvorlige avvik, merknader og endelig vurdering
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--phorium-muted)]">
+                Vurderingsgrunnlag
+              </div>
+              <div className="mt-2 text-sm text-[var(--phorium-text)]">
+                Presisjon, konsistens, faktagrunnlag og formell egnethet
+              </div>
+            </div>
+          </div>
 
           <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2">
@@ -902,9 +928,9 @@ export function FullCheck() {
           <ScanIndicator activeIndex={activeIndex} statuses={statuses} />
 
           <Panel
-            eyebrow="Tillegg"
+            eyebrow="Tilleggsmodul"
             title="Teknisk kontroll"
-            subtitle="Stavefeil, grammatikk, tegnsetting og typografi."
+            subtitle="Tilleggsmodul for stavefeil, grammatikk, tegnsetting og typografi."
           >
             <div className="flex items-start justify-between gap-4">
               <div className="text-xs text-[var(--phorium-muted)]">

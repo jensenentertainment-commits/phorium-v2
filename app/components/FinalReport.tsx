@@ -18,7 +18,7 @@ type StoredStep =
   | {
       pass: boolean;
       issues?: Issue[];
-      bullets?: string[]; // legacy
+      bullets?: string[];
       submittedText?: string;
       submittedAt?: number;
     }
@@ -51,7 +51,8 @@ function readStep(key: string): StoredStep {
             severity: x.severity as Severity,
             category: x.category as Category,
             message: typeof x.message === "string" ? x.message.trim() : "",
-            evidence: typeof x.evidence === "string" ? x.evidence.trim() : undefined,
+            evidence:
+              typeof x.evidence === "string" ? x.evidence.trim() : undefined,
           }))
           .filter(
             (i: Issue) =>
@@ -80,30 +81,6 @@ function readDraft(): string {
   return window.localStorage.getItem("phorium:draft") || "";
 }
 
-function statusText(v: StoredStep) {
-  if (!v) return "Ikke kjørt";
-  return v.pass ? "OK" : "Avvik";
-}
-
-function badgeClasses(v: StoredStep) {
-  if (!v) return "border-white/10 bg-white/5 text-[var(--phorium-muted)]";
-  return v.pass
-    ? "border-[color:var(--phorium-ok)] bg-[var(--phorium-ok-bg)] text-[color:var(--phorium-ok)]"
-    : "border-[color:var(--phorium-bad)] bg-[var(--phorium-bad-bg)] text-[color:var(--phorium-bad)]";
-}
-
-function cardToneClasses(v: StoredStep) {
-  if (!v) return "border-white/10 bg-black/20";
-  return v.pass
-    ? "border-[color:var(--phorium-ok)]/60 bg-[var(--phorium-ok-bg)]"
-    : "border-[color:var(--phorium-bad)]/60 bg-[var(--phorium-bad-bg)]";
-}
-
-function bulletDotClass(v: StoredStep) {
-  if (!v) return "text-[var(--phorium-muted)]";
-  return v.pass ? "text-[color:var(--phorium-ok)]" : "text-[color:var(--phorium-bad)]";
-}
-
 function normalizeKey(s: string) {
   return s.toLowerCase().replace(/\s+/g, " ").replace(/[“”"']/g, "").trim();
 }
@@ -122,6 +99,32 @@ function severityRank(s: Severity) {
   if (s === "critical") return 0;
   if (s === "major") return 1;
   return 2;
+}
+
+function categoryRank(c: Category) {
+  if (c === "consistency") return 0;
+  if (c === "fact") return 1;
+  if (c === "tone") return 2;
+  if (c === "precision") return 3;
+  return 4;
+}
+
+function preferIssue(a: Issue, b: Issue): Issue {
+  const sev = severityRank(a.severity) - severityRank(b.severity);
+  if (sev < 0) return a;
+  if (sev > 0) return b;
+
+  const cat = categoryRank(a.category) - categoryRank(b.category);
+  if (cat < 0) return a;
+  if (cat > 0) return b;
+
+  const aEvidence = (a.evidence ?? "").trim();
+  const bEvidence = (b.evidence ?? "").trim();
+
+  if (aEvidence && !bEvidence) return a;
+  if (bEvidence && !aEvidence) return b;
+
+  return a.message.length <= b.message.length ? a : b;
 }
 
 function severityLabel(s: Severity) {
@@ -147,18 +150,195 @@ function stepTag(stepName: string) {
 }
 
 function titleForStep(step: string) {
-  if (step === "Teknisk") return "Teknisk";
+  if (step === "Teknisk") return "Teknisk kontroll";
   if (step === "Formell") return "Formell egnethet";
-  if (step === "Faktagr.") return "Faktagr.";
+  if (step === "Faktagr.") return "Faktagrunnlag";
   if (step === "Konsistens") return "Konsistens";
   if (step === "Presisjon") return "Presisjon";
   return step;
 }
 
 function emptyStateText(stepName: string, hasRun: boolean) {
-  if (!hasRun) return "Steget er ikke kjørt ennå.";
-  if (stepName === "Formell egnethet") return "Ingen avvik i tone eller register.";
-  return "Ingen avvik registrert.";
+  if (!hasRun) return "Steget er ikke kjørt.";
+  if (stepName === "Formell egnethet") {
+    return "Ingen forhold i tone eller register svekker vurderingen.";
+  }
+  return "Ingen avvik registrert i dette steget.";
+}
+
+function statusText(v: StoredStep) {
+  if (!v) return "Ikke kjørt";
+  return v.pass ? "Godkjent" : "Avvik funnet";
+}
+
+function badgeClasses(v: StoredStep) {
+  if (!v) return "border-white/10 bg-white/5 text-[var(--phorium-muted)]";
+  return v.pass
+    ? "border-[color:var(--phorium-ok)] bg-[var(--phorium-ok-bg)] text-[color:var(--phorium-ok)]"
+    : "border-[color:var(--phorium-bad)] bg-[var(--phorium-bad-bg)] text-[color:var(--phorium-bad)]";
+}
+
+function cardToneClasses(v: StoredStep) {
+  if (!v) return "border-white/10 bg-black/20";
+  return v.pass
+    ? "border-[color:var(--phorium-ok)]/60 bg-[var(--phorium-ok-bg)]"
+    : "border-[color:var(--phorium-bad)]/60 bg-[var(--phorium-bad-bg)]";
+}
+
+function bulletDotClass(v: StoredStep) {
+  if (!v) return "text-[var(--phorium-muted)]";
+  return v.pass ? "text-[color:var(--phorium-ok)]" : "text-[color:var(--phorium-bad)]";
+}
+
+function evidenceFamilyKey(evidence?: string) {
+  const ev = normalizeKey(evidence ?? "");
+  if (!ev) return "";
+
+  if (
+    ev.includes("verdens beste") ||
+    ev.includes("garantert") ||
+    ev.includes("transformere alt")
+  ) {
+    return "HYPE_PROMISE_CLUSTER";
+  }
+
+  if (
+    ev.includes("den eneste i hele universet") ||
+    ev.includes("fjerner alle problemer") ||
+    ev.includes("absolutt alle brukere")
+  ) {
+    return "TOTALIZING_UNREALISTIC_CLUSTER";
+  }
+
+  if (ev.includes("#")) {
+    return "HASHTAG_CLUSTER";
+  }
+
+  return ev;
+}
+
+function isHighRiskToneIssue(issue: {
+  category: Category;
+  code: string;
+  severity: Severity;
+}) {
+  return (
+    issue.category === "tone" &&
+    (issue.code === "EXCESSIVE_HYPE" ||
+      issue.code === "TONE_MISMATCH" ||
+      issue.code === "REGISTER_COLLISION")
+  );
+}
+
+function isPrecisionOverstatement(issue: {
+  category: Category;
+  code: string;
+  severity: Severity;
+}) {
+  return (
+    issue.category === "precision" &&
+    (issue.code === "ABSOLUTE_TERM" ||
+      issue.code === "TOTALIZING_CLAIM" ||
+      issue.code === "SUPERLATIVE_NO_REF")
+  );
+}
+
+function compressMessage(issue: {
+  category: Category;
+  code: string;
+  message: string;
+}) {
+  if (issue.category === "tone") {
+    if (issue.code === "EXCESSIVE_HYPE") {
+      return "Oppblåst reklamespråk svekker seriøsitet.";
+    }
+    if (issue.code === "TONE_MISMATCH") {
+      return "Registeret er lite egnet for profesjonell publisering.";
+    }
+    if (issue.code === "REGISTER_COLLISION") {
+      return "Ujevn språkføring svekker profesjonelt inntrykk.";
+    }
+    if (issue.code === "INFORMAL_LANGUAGE") {
+      return "Uformelt språk i formell tekst.";
+    }
+    if (issue.code === "HASHTAGS_IN_FORMAL") {
+      return "Hashtags i formell tekst svekker profesjonalitet.";
+    }
+    if (issue.code === "UNPROFESSIONAL_EMPHASIS") {
+      return "Unødvendig emfase svekker profesjonelt inntrykk.";
+    }
+  }
+
+  if (issue.category === "precision") {
+    if (issue.code === "ABSOLUTE_TERM") {
+      return "Absolutt formulering uten avgrensning.";
+    }
+    if (issue.code === "TOTALIZING_CLAIM") {
+      return "Totaliserende påstand uten unntak eller forbehold.";
+    }
+    if (issue.code === "SUPERLATIVE_NO_REF") {
+      return "Ubegrunnet superlativ uten sammenligningsgrunnlag.";
+    }
+    if (issue.code === "MISSING_SCOPE") {
+      return "Manglende avgrensning.";
+    }
+    if (issue.code === "VAGUE_QUALITY") {
+      return "Vag kvalitetsbeskrivelse.";
+    }
+  }
+
+  if (issue.category === "fact") {
+    if (issue.code === "STAT_NO_SOURCE") {
+      return "Tallpåstand uten dokumentert grunnlag.";
+    }
+    if (issue.code === "CLAIM_NO_EVIDENCE") {
+      return "Objektiv påstand uten dokumentert grunnlag.";
+    }
+    if (issue.code === "UNVERIFIABLE_SOURCE") {
+      return "Henvisning uten identifiserbar kilde.";
+    }
+    if (issue.code === "AUTHORITY_NO_SOURCE") {
+      return "Autoritetspåstand uten identifisering.";
+    }
+  }
+
+  return issue.message;
+}
+
+function issueImpact(issue: AggItem) {
+  if (issue.severity === "critical") {
+    if (issue.category === "tone") {
+      return "Gjør teksten lite troverdig og uegnet for profesjonell publisering.";
+    }
+    if (issue.category === "fact") {
+      return "Påstanden er så sterk at manglende grunnlag gir høy publiseringsrisiko.";
+    }
+    if (issue.category === "consistency") {
+      return "Skaper en direkte konflikt som undergraver tekstens troverdighet.";
+    }
+    return "Feilen er alvorlig nok til at teksten ikke holder for publisering.";
+  }
+
+  if (issue.severity === "major") {
+    if (issue.category === "tone") {
+      return "Svekker seriøsitet og profesjonell troverdighet.";
+    }
+    if (issue.category === "fact") {
+      return "Svekker grunnlaget for påstanden og troverdigheten i teksten.";
+    }
+    if (issue.category === "consistency") {
+      return "Skaper tvil om opplysningene i teksten henger sammen.";
+    }
+    if (issue.category === "precision") {
+      return "Gjør formuleringen bredere, svakere eller mindre tydelig.";
+    }
+  }
+
+  if (issue.steps.includes("Teknisk")) {
+    return "Påvirker språklig finish, men er ikke avgjørende alene.";
+  }
+
+  return "Svekker kvaliteten, men er ikke avgjørende alene.";
 }
 
 type TabKey = "all" | "critical" | "major" | "technical" | "minor";
@@ -327,36 +507,52 @@ export function FinalReport() {
 
       if (issues.length > 0) {
         for (const i of issues) {
+          const familyKey = evidenceFamilyKey(i.evidence);
           const evNorm = normalizeKey(i.evidence ?? "");
           const msgNorm = normalizeKey(i.message);
 
           const key =
-            evNorm.length >= 6
-              ? `EV::${evNorm}::${i.category}`
-              : `MSG::${i.code}::${msgNorm}`;
+            familyKey ||
+            (evNorm.length >= 10 ? `EV::${evNorm}` : `MSG::${msgNorm}`);
+
+          const normalizedIssue: Issue = {
+            code: i.code,
+            severity: i.severity,
+            category: i.category,
+            message: compressMessage(i),
+            evidence: i.evidence,
+          };
 
           const existing = map.get(key);
 
           if (!existing) {
             map.set(key, {
-              code: i.code,
-              severity: i.severity,
-              category: i.category,
-              message: i.message,
-              evidence: i.evidence,
+              code: normalizedIssue.code,
+              severity: normalizedIssue.severity,
+              category: normalizedIssue.category,
+              message: normalizedIssue.message,
+              evidence: normalizedIssue.evidence,
               steps: new Set([step]),
             });
           } else {
             existing.steps.add(step);
-            if (severityRank(i.severity) < severityRank(existing.severity)) {
-              existing.severity = i.severity;
-            }
-            if (!existing.evidence && i.evidence) existing.evidence = i.evidence;
-            if (i.message && (!existing.message || i.message.length < existing.message.length)) {
-              existing.message = i.message;
-              existing.code = i.code;
-              existing.category = i.category;
-            }
+
+            const winner = preferIssue(
+              {
+                code: existing.code,
+                severity: existing.severity,
+                category: existing.category,
+                message: existing.message,
+                evidence: existing.evidence,
+              },
+              normalizedIssue
+            );
+
+            existing.code = winner.code;
+            existing.severity = winner.severity;
+            existing.category = winner.category;
+            existing.message = winner.message;
+            existing.evidence = winner.evidence;
           }
         }
         continue;
@@ -376,7 +572,7 @@ export function FinalReport() {
         const msg = b.trim();
         if (!msg) continue;
 
-        const key = `LEGACY::${normalizeKey(msg)}::${inferredCategory}`;
+        const key = `LEGACY::${normalizeKey(msg)}`;
         const existing = map.get(key);
 
         if (!existing) {
@@ -389,6 +585,28 @@ export function FinalReport() {
           });
         } else {
           existing.steps.add(step);
+
+          const winner = preferIssue(
+            {
+              code: existing.code,
+              severity: existing.severity,
+              category: existing.category,
+              message: existing.message,
+              evidence: existing.evidence,
+            },
+            {
+              code: "LEGACY",
+              severity: "major",
+              category: inferredCategory,
+              message: msg,
+            }
+          );
+
+          existing.code = winner.code;
+          existing.severity = winner.severity;
+          existing.category = winner.category;
+          existing.message = winner.message;
+          existing.evidence = winner.evidence;
         }
       }
     }
@@ -403,20 +621,55 @@ export function FinalReport() {
       steps: Array.from(v.steps),
     }));
 
-    items.sort((a, b) => {
-      const d = severityRank(a.severity) - severityRank(b.severity);
-      if (d !== 0) return d;
-      const c = a.category.localeCompare(b.category);
-      if (c !== 0) return c;
-      return a.message.localeCompare(b.message);
+    const toneMajors = items.filter((x) => isHighRiskToneIssue(x)).length;
+    const precisionMajors = items.filter((x) => isPrecisionOverstatement(x)).length;
+
+    const boosted = items.map((item) => {
+      if (
+        toneMajors >= 2 &&
+        precisionMajors >= 2 &&
+        item.category === "tone" &&
+        isHighRiskToneIssue(item)
+      ) {
+        return {
+          ...item,
+          severity: "critical" as Severity,
+        };
+      }
+
+      return item;
     });
 
-    return items.slice(0, 600);
+    boosted.sort((a, b) => {
+      const d = severityRank(a.severity) - severityRank(b.severity);
+      if (d !== 0) return d;
+
+      const c = categoryRank(a.category) - categoryRank(b.category);
+      if (c !== 0) return c;
+
+      return a.message.localeCompare(b.message, "no");
+    });
+
+    return boosted.slice(0, 600);
   }, [presisjon, konsistens, faktagrunnlag, publiseringsklar, teknisk]);
 
-  const criticalItems = useMemo(() => aggregated.filter((a) => a.severity === "critical"), [aggregated]);
-  const majorItems = useMemo(() => aggregated.filter((a) => a.severity === "major"), [aggregated]);
-  const minorItems = useMemo(() => aggregated.filter((a) => a.severity === "minor"), [aggregated]);
+  const dominantIssue = useMemo(() => {
+    if (!aggregated.length) return null;
+    return aggregated[0];
+  }, [aggregated]);
+
+  const criticalItems = useMemo(
+    () => aggregated.filter((a) => a.severity === "critical"),
+    [aggregated]
+  );
+  const majorItems = useMemo(
+    () => aggregated.filter((a) => a.severity === "major"),
+    [aggregated]
+  );
+  const minorItems = useMemo(
+    () => aggregated.filter((a) => a.severity === "minor"),
+    [aggregated]
+  );
 
   const technicalMinorItems = useMemo(
     () => aggregated.filter((a) => a.steps.includes("Teknisk") && a.severity === "minor"),
@@ -446,32 +699,45 @@ export function FinalReport() {
   }, [criticalItems.length, majorItems.length]);
 
   const verdictNote = useMemo(() => {
-    if (!anyRun) return "Ingen steg er kjørt. Kjør kontrollflyten for å generere rapport.";
-    if (computedVerdict === null) return "Sluttvurdering er ikke tilgjengelig.";
-    if (computedVerdict === true) return "Teksten vurderes publiseringsklar etter gjeldende standard.";
-    return "Publisering frarådes før registrerte avvik er rettet.";
+    if (!anyRun) {
+      return "Ingen kontroll er kjørt. Kjør kontrollflyten for å generere en vurdering.";
+    }
+    if (computedVerdict === null) {
+      return "Sluttvurdering er ikke tilgjengelig.";
+    }
+    if (computedVerdict === true) {
+      return "Teksten vurderes å holde for publisering etter gjeldende standard.";
+    }
+    return "Denne teksten bør ikke publiseres som den står.";
   }, [anyRun, computedVerdict]);
 
   const verdictRule = useMemo(() => {
     if (!anyRun || computedVerdict === null) return "";
     return computedVerdict
-      ? "Kriterier: Ingen kritiske avvik og færre enn 3 alvorlige."
-      : "Kriterier: Kritiske avvik eller minst 3 alvorlige utløser ikke publiseringsklar.";
+      ? "Ingen kritiske avvik og færre enn tre alvorlige avvik er registrert."
+      : "Ett eller flere kritiske avvik, eller minst tre alvorlige avvik, gjør at teksten ikke holder for publisering.";
   }, [anyRun, computedVerdict]);
 
   const countsLine = useMemo(() => {
-    const techMinorCount = technicalMinorItems.length;
-    const notesMinorCount = nonTechnicalMinorItems.length;
-    return `Kritiske: ${criticalItems.length} • Alvorlige: ${majorItems.length} • Tekniske: ${techMinorCount} • Merknader: ${notesMinorCount}`;
-  }, [criticalItems.length, majorItems.length, technicalMinorItems.length, nonTechnicalMinorItems.length]);
+    return `Kritiske: ${criticalItems.length} • Alvorlige: ${majorItems.length} • Merknader: ${minorItems.length} • Tekniske funn: ${technicalMinorItems.length}`;
+  }, [
+    criticalItems.length,
+    majorItems.length,
+    minorItems.length,
+    technicalMinorItems.length,
+  ]);
 
   const filteredItems = useMemo(() => {
     let base = aggregated;
 
     if (tab === "critical") base = base.filter((x) => x.severity === "critical");
     if (tab === "major") base = base.filter((x) => x.severity === "major");
-    if (tab === "technical") base = base.filter((x) => x.steps.includes("Teknisk") && x.severity === "minor");
-    if (tab === "minor") base = base.filter((x) => x.severity === "minor" && !x.steps.includes("Teknisk"));
+    if (tab === "technical") {
+      base = base.filter((x) => x.steps.includes("Teknisk") && x.severity === "minor");
+    }
+    if (tab === "minor") {
+      base = base.filter((x) => x.severity === "minor" && !x.steps.includes("Teknisk"));
+    }
 
     const qq = normalizeKey(q);
     if (!qq) return base;
@@ -483,6 +749,12 @@ export function FinalReport() {
       return hay.includes(qq);
     });
   }, [aggregated, tab, q]);
+
+  const excerpt = useMemo(() => {
+    const t = reportText.trim();
+    if (!t) return "";
+    return t.length > 900 ? t.slice(0, 900) + "…" : t;
+  }, [reportText]);
 
   function downloadPdf() {
     const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -508,7 +780,10 @@ export function FinalReport() {
     };
 
     const now = new Date();
-    const dateStr = now.toLocaleString("no-NO", { dateStyle: "short", timeStyle: "medium" });
+    const dateStr = now.toLocaleString("no-NO", {
+      dateStyle: "short",
+      timeStyle: "medium",
+    });
 
     const controlId =
       "PHR-" +
@@ -521,9 +796,12 @@ export function FinalReport() {
     let y = topY;
     let pageNo = 1;
 
-    const setTextColor = (rgb: readonly number[]) => doc.setTextColor(rgb[0], rgb[1], rgb[2]);
-    const setDrawColor = (rgb: readonly number[]) => doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
-    const setFillColor = (rgb: readonly number[]) => doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+    const setTextColor = (rgb: readonly number[]) =>
+      doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+    const setDrawColor = (rgb: readonly number[]) =>
+      doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+    const setFillColor = (rgb: readonly number[]) =>
+      doc.setFillColor(rgb[0], rgb[1], rgb[2]);
 
     function drawFooter() {
       const y1 = pageH - 40;
@@ -640,10 +918,10 @@ export function FinalReport() {
       y += 16;
     };
 
-    const paragraph = (text: string, fontSize = 11) => {
+    const paragraph = (text: string, fontSize = 11, color: readonly number[] = colors.ink) => {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(fontSize);
-      setTextColor(colors.ink);
+      setTextColor(color);
 
       const lines = doc.splitTextToSize(text, maxW);
       for (const line of lines) {
@@ -692,7 +970,7 @@ export function FinalReport() {
     const boxStartY = y - 10;
     setFillColor(colors.chip);
     setDrawColor(colors.border);
-    doc.roundedRect(marginX - 6, boxStartY, maxW + 12, 86, 10, 10, "FD");
+    doc.roundedRect(marginX - 6, boxStartY, maxW + 12, 130, 10, 10, "FD");
 
     const statusLabel =
       computedVerdict === null
@@ -708,14 +986,12 @@ export function FinalReport() {
         ? "Høy"
         : majorItems.length > 0
         ? "Moderat"
-        : minorItems.length >= 3
-        ? "Lav"
-        : "Minimal";
-
-    ensureSpace(34);
+        : "Lav";
 
     const barKind =
       computedVerdict === null ? "neutral" : computedVerdict ? "ok" : "bad";
+
+    ensureSpace(34);
 
     setFillColor(barKind === "ok" ? colors.okBg : barKind === "bad" ? colors.badBg : colors.chip);
     setDrawColor(barKind === "ok" ? colors.ok : barKind === "bad" ? colors.bad : colors.border);
@@ -728,14 +1004,59 @@ export function FinalReport() {
     doc.setFontSize(11);
     doc.text(`Status: ${statusLabel} • Risiko: ${riskLabel}`, marginX + 12, y + 6);
 
-    y += 28;
+    y += 30;
+
+    const pdfVerdictSentence =
+      computedVerdict === null
+        ? "Ingen sluttvurdering er tilgjengelig."
+        : computedVerdict
+        ? "Teksten vurderes å holde for publisering etter gjeldende standard."
+        : "Teksten bør ikke publiseres som den står.";
 
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    setTextColor(colors.ink);
+
+    const verdictLines = doc.splitTextToSize(pdfVerdictSentence, maxW - 24);
+    for (const ln of verdictLines) {
+      ensureSpace(14);
+      doc.text(ln, marginX + 12, y);
+      y += 12;
+    }
+
+    if (dominantIssue && computedVerdict === false) {
+      y += 2;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      setTextColor(colors.muted);
+      doc.text("Hovedgrunn", marginX + 12, y);
+      y += 12;
+
+      const dominantLines = doc.splitTextToSize(dominantIssue.message, maxW - 24);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      setTextColor(colors.ink);
+      for (const ln of dominantLines) {
+        ensureSpace(14);
+        doc.text(ln, marginX + 12, y);
+        y += 12;
+      }
+
+      const impactLines = doc.splitTextToSize(issueImpact(dominantIssue), maxW - 24);
+      doc.setFontSize(9);
+      setTextColor(colors.muted);
+      for (const ln of impactLines) {
+        ensureSpace(14);
+        doc.text(ln, marginX + 12, y);
+        y += 12;
+      }
+    }
+
+    y += 4;
     doc.setFontSize(9);
     setTextColor(colors.muted);
     doc.text(countsLine, marginX + 12, y);
-
-    y += 16;
+    y += 14;
 
     if (verdictRule) {
       const ruleLines = doc.splitTextToSize(verdictRule, maxW - 24);
@@ -744,38 +1065,36 @@ export function FinalReport() {
         doc.text(ln, marginX + 12, y);
         y += 12;
       }
-      y += 10;
-    } else {
-      y += 10;
     }
+
+    y += 10;
 
     const trimmed = (reportText || "").trim();
     if (trimmed.length) {
       sectionTitle("Tekst (utdrag)");
+      paragraph("Viser et kort utdrag av innsendt tekst.", 10, colors.muted);
+      y += 2;
 
-      setTextColor(colors.muted);
-      doc.setFontSize(10);
-      doc.text("Viser et kort utdrag av innsendt tekst.", marginX, y);
-      y += 14;
-
-      const excerpt = trimmed.length > 900 ? trimmed.slice(0, 900) + "…" : trimmed;
-      paragraph(excerpt, 10);
+      const pdfExcerpt = trimmed.length > 900 ? trimmed.slice(0, 900) + "…" : trimmed;
+      paragraph(pdfExcerpt, 10);
       y += 6;
     }
 
     sectionTitle("Registrerte avvik");
-    setTextColor(colors.muted);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.text("Avvik er deduplisert og strukturert etter alvorlighetsgrad og kategori.", marginX, y);
-    y += 14;
+    paragraph(
+      "Avvikene under viser hva som svekker teksten, og hvorfor det påvirker publiseringsvurderingen.",
+      9,
+      colors.muted
+    );
+    y += 2;
 
     const mkLines = (items: AggItem[]) =>
       items.map((a) => {
-        const ev = a.evidence ? ` («${a.evidence}»)` : "";
+        const impact = issueImpact(a);
+        const ev = a.evidence ? ` «${a.evidence}»` : "";
         const cat = ` [${categoryLabel(a.category)}]`;
         const src = a.steps.length > 0 ? ` (Funnet i: ${a.steps.join(", ")})` : "";
-        return `${a.message}${ev}${cat}${src}`;
+        return `${a.message}${ev}${cat}${src} → ${impact}`;
       });
 
     if (!aggregated.length) {
@@ -806,7 +1125,7 @@ export function FinalReport() {
         keepTogether(90);
         setTextColor(colors.muted);
         doc.setFont("helvetica", "bold");
-        doc.text("Teknisk", marginX, y);
+        doc.text("Tekniske funn", marginX, y);
         y += 16;
         bulletList(mkLines(technicalMinorItems), "neutral");
       }
@@ -839,19 +1158,20 @@ export function FinalReport() {
       ? "border-[color:var(--phorium-ok)] bg-[var(--phorium-ok-bg)] text-[color:var(--phorium-ok)]"
       : "border-[color:var(--phorium-bad)] bg-[var(--phorium-bad-bg)] text-[color:var(--phorium-bad)]";
 
-  const excerpt = useMemo(() => {
-    const t = reportText.trim();
-    if (!t) return "";
-    return t.length > 900 ? t.slice(0, 900) + "…" : t;
-  }, [reportText]);
+  const stickySummary =
+    computedVerdict === null
+      ? "Kjør kontrollflyten for å generere en vurdering."
+      : computedVerdict
+      ? "Teksten holder for publisering etter gjeldende standard."
+      : "Teksten bør ikke publiseres som den står.";
 
   return (
     <section className="space-y-4">
       <div className="sticky top-3 z-20">
-        <div className="rounded-2xl border border-white/10 bg-black/35 px-3 py-3 backdrop-blur sm:px-4 shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
+        <div className="rounded-2xl border border-white/10 bg-black/35 px-3 py-3 shadow-[0_18px_60px_rgba(0,0,0,0.35)] backdrop-blur sm:px-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <div className="text-[11px] tracking-[0.22em] uppercase text-[var(--phorium-muted)]">
+              <div className="text-[11px] uppercase tracking-[0.22em] text-[var(--phorium-muted)]">
                 Kontrollrapport
               </div>
 
@@ -876,19 +1196,25 @@ export function FinalReport() {
                 )}
 
                 {anyRun && (
-                  <span className="hidden sm:inline text-xs text-[var(--phorium-muted)]">
+                  <span className="hidden text-xs text-[var(--phorium-muted)] sm:inline">
                     {countsLine}
                   </span>
                 )}
               </div>
+
+              <div className="mt-2 text-sm text-[var(--phorium-muted)]">{stickySummary}</div>
             </div>
 
             <button
               type="button"
               onClick={downloadPdf}
-              className="inline-flex items-center justify-center rounded-full px-4 sm:px-5 py-2.5 text-sm font-semibold border border-white/10 bg-white/5 text-[var(--phorium-text)] hover:bg-white/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-[var(--phorium-text)] transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 sm:px-5"
               disabled={!anyRun}
-              title={!anyRun ? "Kjør minst ett steg for å generere PDF." : "Last ned kontrollrapport som PDF."}
+              title={
+                !anyRun
+                  ? "Kjør minst ett steg for å generere PDF."
+                  : "Last ned kontrollrapport som PDF."
+              }
             >
               Last ned PDF
             </button>
@@ -896,10 +1222,10 @@ export function FinalReport() {
         </div>
       </div>
 
-      <div className="rounded-3xl border border-white/10 bg-black/20 p-4 sm:p-6 shadow-[0_18px_60px_rgba(0,0,0,0.45)]">
+      <div className="rounded-3xl border border-white/10 bg-black/20 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.45)] sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <div className="text-xs tracking-[0.22em] uppercase text-[var(--phorium-muted)]">
+            <div className="text-xs uppercase tracking-[0.22em] text-[var(--phorium-muted)]">
               Endelig vurdering
             </div>
 
@@ -912,6 +1238,20 @@ export function FinalReport() {
             </div>
 
             <div className="mt-2 text-sm text-[var(--phorium-muted)]">{verdictNote}</div>
+
+            {dominantIssue && computedVerdict === false && (
+              <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--phorium-muted)]">
+                  Hovedgrunn
+                </div>
+                <div className="mt-2 text-sm text-[var(--phorium-text)]">
+                  {dominantIssue.message}
+                </div>
+                <div className="mt-2 text-xs text-[var(--phorium-muted)]">
+                  {issueImpact(dominantIssue)}
+                </div>
+              </div>
+            )}
 
             {verdictRule && (
               <div className="mt-2 text-xs text-[var(--phorium-muted)]">{verdictRule}</div>
@@ -931,7 +1271,7 @@ export function FinalReport() {
                 )}
                 {technicalMinorItems.length > 0 && (
                   <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                    {technicalMinorItems.length} tekniske
+                    {technicalMinorItems.length} tekniske funn
                   </span>
                 )}
                 {nonTechnicalMinorItems.length > 0 && (
@@ -946,7 +1286,7 @@ export function FinalReport() {
           <button
             type="button"
             onClick={downloadPdf}
-            className="hidden sm:inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold border border-white/10 bg-white/5 text-[var(--phorium-text)] hover:bg-white/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="hidden items-center justify-center rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-[var(--phorium-text)] transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 sm:inline-flex"
             disabled={!anyRun}
           >
             Last ned PDF
@@ -961,7 +1301,7 @@ export function FinalReport() {
           open={openExcerpt}
           onToggle={() => setOpenExcerpt((v) => !v)}
         >
-          <div className="text-sm text-[var(--phorium-text)] leading-relaxed whitespace-pre-wrap">
+          <div className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--phorium-text)]">
             {excerpt}
           </div>
         </Section>
@@ -978,8 +1318,7 @@ export function FinalReport() {
             <div
               key={x.name}
               className={[
-                "rounded-3xl border p-4 sm:p-6 shadow-[0_18px_60px_rgba(0,0,0,0.35)]",
-                "transition",
+                "rounded-3xl border p-4 shadow-[0_18px_60px_rgba(0,0,0,0.35)] transition sm:p-6",
                 cardToneClasses(x.v),
               ].join(" ")}
             >
@@ -1031,7 +1370,7 @@ export function FinalReport() {
 
       <Section
         title="Registrerte avvik"
-        subtitle="Avvik er deduplisert og strukturert. Bruk filtrering og søk for å navigere raskt."
+        subtitle="Avvikene under viser hva som svekker teksten, og hvorfor det påvirker publiseringsvurderingen."
         open={openIssues}
         onToggle={() => setOpenIssues((v) => !v)}
       >
@@ -1040,7 +1379,9 @@ export function FinalReport() {
             Ingen data tilgjengelig. Kjør kontrollflyten for å generere avvik.
           </div>
         ) : aggregated.length === 0 ? (
-          <div className="text-sm text-[color:var(--phorium-ok)]">Ingen registrerte avvik.</div>
+          <div className="text-sm text-[color:var(--phorium-ok)]">
+            Ingen registrerte avvik.
+          </div>
         ) : (
           <>
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -1062,18 +1403,18 @@ export function FinalReport() {
                 </TabButton>
               </div>
 
-              <div className="flex w-full sm:w-auto items-center gap-2">
+              <div className="flex w-full items-center gap-2 sm:w-auto">
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   placeholder="Søk i avvik…"
-                  className="w-full sm:w-64 rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-[var(--phorium-text)] placeholder:text-[var(--phorium-muted)] focus:outline-none focus:ring-2 focus:ring-white/10"
+                  className="w-full rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-[var(--phorium-text)] placeholder:text-[var(--phorium-muted)] focus:outline-none focus:ring-2 focus:ring-white/10 sm:w-64"
                 />
                 {q && (
                   <button
                     type="button"
                     onClick={() => setQ("")}
-                    className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-[var(--phorium-muted)] hover:bg-white/10 hover:text-[var(--phorium-text)] transition"
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-[var(--phorium-muted)] transition hover:bg-white/10 hover:text-[var(--phorium-text)]"
                     title="Tøm søk"
                   >
                     Tøm
@@ -1086,7 +1427,7 @@ export function FinalReport() {
               Viser {filteredItems.length} av {aggregated.length}.
             </div>
 
-            <ul className="mt-4 space-y-3 text-sm">
+            <ul className="mt-4 space-y-4 text-sm">
               {filteredItems.map((a) => (
                 <li key={a.key} className="flex items-start gap-3">
                   <span
@@ -1099,8 +1440,13 @@ export function FinalReport() {
                   >
                     •
                   </span>
+
                   <div className="min-w-0">
-                    <div className="text-[var(--phorium-text)] leading-relaxed">{a.message}</div>
+                    <div className="leading-relaxed text-[var(--phorium-text)]">{a.message}</div>
+
+                    <div className="mt-2 text-xs text-[var(--phorium-muted)]">
+                      {issueImpact(a)}
+                    </div>
 
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-[var(--phorium-muted)]">
@@ -1121,7 +1467,9 @@ export function FinalReport() {
                     </div>
 
                     {a.evidence && (
-                      <div className="mt-2 text-xs text-[var(--phorium-muted)]">«{a.evidence}»</div>
+                      <div className="mt-2 text-xs text-[var(--phorium-muted)]">
+                        «{a.evidence}»
+                      </div>
                     )}
                   </div>
                 </li>
@@ -1129,7 +1477,7 @@ export function FinalReport() {
             </ul>
 
             <div className="mt-6 text-xs text-[var(--phorium-muted)]">
-              Avvik er deduplisert (evidence-first) og sortert etter alvorlighet.
+              Avvik er deduplisert og sortert etter alvorlighet.
             </div>
           </>
         )}

@@ -39,8 +39,8 @@ export function Editor({
   disabled,
   minChars,
   hint,
-  label = "Tekst til kontroll",
-  placeholder = "Lim inn teksten som skal kontrolleres…",
+  label = "Tekst til vurdering",
+  placeholder = "Lim inn teksten som skal vurderes før publisering…",
   onSubmit,
   showWordCount = true,
   showClipboardPaste = true,
@@ -136,8 +136,8 @@ export function Editor({
   const autoHint =
     typeof minChars === "number"
       ? ready
-        ? "Klar til kontroll."
-        : `Lim inn minst ${minChars} tegn for å starte.`
+        ? "Klar til vurdering."
+        : `Lim inn minst ${minChars} tegn for å starte vurderingen.`
       : "";
 
   const hintText = hint ?? autoHint;
@@ -229,30 +229,20 @@ export function Editor({
                   {hintText}
                 </div>
               ) : null}
+
+              <div className="mt-2 text-xs text-[var(--phorium-muted)]">
+                Phorium vurderer om teksten holder for publisering som den står.
+              </div>
             </div>
 
             <div className="text-xs tabular-nums text-[var(--phorium-muted)] sm:text-right">
-              {typeof minChars === "number" ? (
+              {count} tegn
+              {showWordCount ? (
                 <>
-                  {count} tegn <span className="opacity-60">•</span> {effectiveCount} reelle
-                  {showWordCount ? (
-                    <>
-                      {" "}
-                      <span className="opacity-60">•</span> {words} ord
-                    </>
-                  ) : null}
+                  {" "}
+                  <span className="opacity-60">•</span> {words} ord
                 </>
-              ) : (
-                <>
-                  {count} tegn
-                  {showWordCount ? (
-                    <>
-                      {" "}
-                      <span className="opacity-60">•</span> {words} ord
-                    </>
-                  ) : null}
-                </>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -316,7 +306,7 @@ export function Editor({
           {onSubmit ? (
             <div className="mt-3 text-[15px] text-[var(--phorium-muted)]">
               Snarvei: <span className="tabular-nums">Ctrl</span>/<span className="tabular-nums">⌘</span> +{" "}
-              <span className="tabular-nums">Enter</span> for å kjøre kontroll.
+              <span className="tabular-nums">Enter</span> for å starte vurderingen.
             </div>
           ) : null}
         </div>
